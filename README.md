@@ -1,7 +1,7 @@
 # dsplit
 Directory splitting utility
 
-# Stil work in progress
+# Still work in progress
 
 # TODO
 - [ ] Clean up the main function
