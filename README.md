@@ -1,0 +1,2 @@
+# dsplit
+Directory splitting utility
