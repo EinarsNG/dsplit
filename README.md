@@ -5,6 +5,6 @@ Directory splitting utility
 
 # TODO
 - [ ] Add description
-- [ ] Clean up the main function
+- [x] Clean up the main function
 - [ ] Write unit tests
 - [ ] Refactor
