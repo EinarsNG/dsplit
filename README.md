@@ -1,5 +1,5 @@
 # dsplit
-Directory splitting utility that lets you separate files by their name/extension using regex. Previous solution was to use GNU core utilities such as `find`, `grep`, `xargs`, and others to find certain files with regex and move them to the desired location. This utility aims to automate that task and combine it into one.
+Directory splitting utility that lets you separate files by their name/extension/path using regex. Previous solution was to use GNU core utilities such as `find`, `grep`, `xargs`, and others to find certain files with regex and move them to the desired location. This utility aims to automate that task and combine it into one.
 
 # Command line options
 | Option  | Description | Required |
