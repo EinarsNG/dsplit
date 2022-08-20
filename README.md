@@ -15,7 +15,7 @@ Directory splitting utility that lets you separate files by their name/extension
 # Still work in progress
 
 # TODO
-- [ ] Add description
+- [x] Add description
 - [x] Clean up the main function
 - [ ] Write unit tests
 - [ ] Refactor
