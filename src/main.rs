@@ -242,7 +242,7 @@ fn main()
     {
         let mut ap = ArgumentParser::new();
         ap.refer(&mut source_path)
-            .add_option(&["-p", "--path"], Store, "Source folder path")
+            .add_option(&["-s", "--source"], Store, "Source folder path")
             .required();
 
         ap.refer(&mut expressions)
@@ -254,7 +254,7 @@ fn main()
             .add_option(&["-f", "--flat"], StoreTrue, "Flatten the structure (folder structure will not be kept)");
 
         ap.refer(&mut output_prefix)
-            .add_option(&["--prefix"], Store,
+            .add_option(&["-p", "--prefix"], Store,
                 "Prefix of the output folder (default: 1, 2, 3, ...)");
 
         ap.refer(&mut output_path)
@@ -263,10 +263,10 @@ fn main()
 
         ap.refer(&mut move_files)
             .add_option(&["-m", "--move"], StoreTrue,
-                "Move files instead of copying them (only if the source and destination is on the same mount point)");
+                "Move files instead of copying them (Default: Copy)");
 
         ap.refer(&mut print_tree)
-            .add_option(&["--tree"], StoreTrue,
+            .add_option(&["-t", "--tree"], StoreTrue,
                 "Print each group and their matched files");
 
         ap.parse_args_or_exit();
