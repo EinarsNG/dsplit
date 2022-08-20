@@ -1,3 +1,4 @@
+use std::fs::remove_file;
 use std::fs::rename;
 use std::path::Path;
 use std::io::Error;
@@ -102,6 +103,7 @@ fn main()
     let mut expressions: Vec<String> = Vec::new();
     let mut flat: bool = false;
     let mut output_prefix: OsString = OsString::new();
+    let mut output_path: OsString = OsString::new();
     let mut move_files: bool = false;
     let mut print_tree: bool = false;
     {
@@ -121,6 +123,10 @@ fn main()
         ap.refer(&mut output_prefix)
             .add_option(&["--prefix"], Store,
                 "Prefix of the output folder (default: 1, 2, 3, ...)");
+
+        ap.refer(&mut output_path)
+            .add_option(&["-o", "--output"], Store,
+                "Output path");
 
         ap.refer(&mut move_files)
             .add_option(&["-m", "--move"], StoreTrue,
@@ -160,10 +166,12 @@ fn main()
         {
             let dst_path: PathBuf;
             let index_str: OsString = OsString::from((index+1).to_string());
-            let mut parent_folder_str: OsString = OsString::new();
-            parent_folder_str.push(output_prefix.to_owned());
-            parent_folder_str.push(index_str);
-            let parent_folder = Path::new(&parent_folder_str);
+            let mut group_folder_str: OsString = OsString::new();
+            group_folder_str.push(output_prefix.to_owned());
+            group_folder_str.push(index_str);
+            let output_folder = Path::new(&output_path);
+            let group_folder = Path::new(&group_folder_str);
+            let parent_folder = output_folder.join(group_folder);
             let mut file_path = Path::new(path);
             file_path = match file_path.strip_prefix(&source_path)
             {
@@ -236,9 +244,22 @@ fn main()
             }
             else 
             {
-                match rename(src_path, dst_path)
+                match rename(&src_path, dst_path)
                 {
-                    Err(err) => panic!("Error moving file over!: {}", err),
+                    // try copy files and remove them after in case error occurs
+                    Err(_err) =>
+                    {
+                        match copy(&src_path, dst_path)
+                        {
+                            Err(err) => panic!("Error copying file {} over to {}!: {}", src_path.to_str().unwrap(), path.to_str().unwrap(), err),
+                            Ok(_sz) => {},
+                        };
+                        match remove_file(&src_path)
+                        {
+                            Err(err) => panic!("Error deleting file {}:  {}", src_path.to_str().unwrap(), err),
+                            Ok(()) => {},
+                        };
+                    }
                     Ok(_sz) => {},
                 };
             }
