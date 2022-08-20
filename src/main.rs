@@ -4,7 +4,7 @@ use std::path::Path;
 use std::io::Error;
 use std::ffi::OsString;
 use std::path::PathBuf;
-//use std::process::exit;
+use std::process::exit;
 use argparse::ArgumentParser;
 use argparse::List;
 use argparse::Store;
@@ -263,11 +263,11 @@ fn main()
 
         ap.refer(&mut move_files)
             .add_option(&["-m", "--move"], StoreTrue,
-                "Move files instead of copying them (Default: Copy)");
+                "Move files instead of copying them");
 
         ap.refer(&mut print_tree)
             .add_option(&["-t", "--tree"], StoreTrue,
-                "Print each group and their matched files");
+                "Print each group and their matched files without doing anything");
 
         ap.parse_args_or_exit();
     }
@@ -297,6 +297,7 @@ fn main()
     if print_tree
     {
         print_group_tree(&groups);
+        exit(0);
     }
 
     // create the directory tree and move/copy files over
