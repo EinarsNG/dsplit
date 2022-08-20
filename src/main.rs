@@ -97,6 +97,139 @@ fn parse_regex(expressions: &Vec<String>) -> Result<Vec<Regex>, regex::Error>
     Ok(parsed)
 }
 
+// create file groups based on regex
+fn create_groups(
+    regexes: Vec<Regex>,
+    paths: Vec<OsString>,
+    output_path: &OsString,
+    output_prefix: &OsString,
+    source_path: &OsString,
+    flat: bool) -> Vec<Vec<OsString>>
+{
+    let mut groups: Vec<Vec<OsString>> = vec![Vec::new(); regexes.len()];
+    for path in paths.iter()
+    {
+        for (index, expr) in regexes.iter().enumerate()
+        {
+            let dst_path: PathBuf;
+            let index_str: OsString = OsString::from((index+1).to_string());
+            let mut group_folder_str: OsString = OsString::new();
+            group_folder_str.push(output_prefix.to_owned());
+            group_folder_str.push(index_str);
+            let output_folder = Path::new(&output_path);
+            let group_folder = Path::new(&group_folder_str);
+            let parent_folder = output_folder.join(group_folder);
+            let mut file_path = Path::new(path);
+            file_path = match file_path.strip_prefix(&source_path)
+            {
+                Err(_err) => file_path,
+                Ok(res) => res,
+            };
+
+            if !flat
+            {
+                dst_path = parent_folder.join(file_path);
+            }
+            else
+            {
+                let file_name = match file_path.file_name()
+                {
+                    None => { continue; },
+                    Some(res) => res,
+                };
+                dst_path = parent_folder.join(Path::new(file_name))
+            }
+
+            let temp = match path.to_str()
+            {
+                None => { continue; },
+                Some(res) => res,
+            };
+            if expr.is_match(temp) && !groups[index].contains(path)
+            {
+                groups[index].push(dst_path.into_os_string());
+            }
+        }
+    }
+    groups
+}
+
+fn print_group_tree(groups: &Vec<Vec<OsString>>)
+{
+        for (index, group) in groups.iter().enumerate()
+        {
+            println!("Group {}:", index+1);
+            for item in group.iter()
+            {
+                println!("\t{}", item.to_str().unwrap());
+            }
+        }
+}
+
+fn finalize(
+    groups: Vec<Vec<OsString>>,
+    output_path: OsString,
+    output_prefix: OsString,
+    source_path: OsString,
+    move_files: bool)
+-> Result<(), std::io::Error>
+{
+    for (index, group) in groups.iter().enumerate()
+    {
+        create_dir_tree(group).unwrap();
+        for path in group.iter()
+        {
+            let dst_path = Path::new(path);
+            let mut group_folder = OsString::new();
+            group_folder.push(&output_prefix);
+            let index_str = OsString::from((index+1).to_string());
+            group_folder.push(index_str);
+            let src_path_stripped = match dst_path.strip_prefix(&output_path)
+            {
+                Err(_err) => { continue; },
+                Ok(res) => res,
+            };
+            let src_path_stripped = match src_path_stripped.strip_prefix(group_folder)
+            {
+                Err(_err) => { continue; },
+                Ok(res) => res,
+            };
+            let src_path = Path::new(&source_path).join(src_path_stripped);
+            if !move_files
+            {
+                match copy(&src_path, dst_path)
+                {
+                    Err(err) => { return Err(err); },//panic!("Error copying file {} over to {}!: {}", src_path.to_str().unwrap(), path.to_str().unwrap(), err),
+                    Ok(_sz) => {},
+                };
+            }
+            else 
+            {
+                match rename(&src_path, dst_path)
+                {
+                    // try copy files and remove them after in case error occurs
+                    // std::io::ErrorKind::CrossesDevices not supported in stable Rust
+                    Err(_err) =>
+                    {
+                        match copy(&src_path, dst_path)
+                        {
+                            Err(err) => { return Err(err); },//panic!("Error copying file {} over to {}!: {}", src_path.to_str().unwrap(), path.to_str().unwrap(), err),
+                            Ok(_sz) => {},
+                        };
+                        match remove_file(&src_path)
+                        {
+                            Err(err) => { return Err(err); },//panic!("Error deleting file {}:  {}", src_path.to_str().unwrap(), err),
+                            Ok(()) => {},
+                        };
+                    }
+                    Ok(_sz) => {},
+                };
+            }
+        }
+    }
+    Ok(())
+}
+
 fn main()
 {
     let mut source_path: OsString = OsString::new();
@@ -151,7 +284,7 @@ fn main()
     println!("Found {} files.", file_count);
 
     // parse all regex supplied
-    let regexes = match parse_regex(&expressions)
+    let regexes: Vec<Regex> = match parse_regex(&expressions)
     {
         Err(err) => panic!("Failed to parse regex expressions: {}", err),
         Ok(res) => res,
@@ -159,110 +292,17 @@ fn main()
 
     // put each file in a group matching regex (FIFO order removing matches from the list)
     // if file is already assigned, skip it
-    let mut groups: Vec<Vec<OsString>> = vec![Vec::new(); regexes.len()];
-    for path in paths.iter()
-    {
-        for (index, expr) in regexes.iter().enumerate()
-        {
-            let dst_path: PathBuf;
-            let index_str: OsString = OsString::from((index+1).to_string());
-            let mut group_folder_str: OsString = OsString::new();
-            group_folder_str.push(output_prefix.to_owned());
-            group_folder_str.push(index_str);
-            let output_folder = Path::new(&output_path);
-            let group_folder = Path::new(&group_folder_str);
-            let parent_folder = output_folder.join(group_folder);
-            let mut file_path = Path::new(path);
-            file_path = match file_path.strip_prefix(&source_path)
-            {
-                Err(_err) => file_path,
-                Ok(res) => res,
-            };
-
-            if !flat
-            {
-                dst_path = parent_folder.join(file_path);
-            }
-            else
-            {
-                let file_name = match file_path.file_name()
-                {
-                    None => { continue; },
-                    Some(res) => res,
-                };
-                dst_path = parent_folder.join(Path::new(file_name))
-            }
-
-            let temp = match path.to_str()
-            {
-                None => { continue; },
-                Some(res) => res,
-            };
-            if expr.is_match(temp) && !groups[index].contains(path)
-            {
-                groups[index].push(dst_path.into_os_string());
-            }
-        }
-    }
+    let groups: Vec<Vec<OsString>> = create_groups(regexes, paths, &output_path, &output_prefix, &source_path, flat);
 
     if print_tree
     {
-        for (index, group) in groups.iter().enumerate()
-        {
-            println!("Group {}:", index+1);
-            for item in group.iter()
-            {
-                println!("\t{}", item.to_str().unwrap());
-            }
-        }
+        print_group_tree(&groups);
     }
 
     // create the directory tree and move/copy files over
-    for (index, group) in groups.iter().enumerate()
+    match finalize(groups, output_path, output_prefix, source_path, move_files)
     {
-        create_dir_tree(group).unwrap();
-        for path in group.iter()
-        {
-            let dst_path = Path::new(path);
-            let mut group_folder = OsString::new();
-            group_folder.push(&output_prefix);
-            let index_str = OsString::from((index+1).to_string());
-            group_folder.push(index_str);
-            let src_path_stripped = match dst_path.strip_prefix(group_folder)
-            {
-                Err(_err) => { continue; },
-                Ok(res) => res,
-            };
-            let src_path = Path::new(&source_path).join(src_path_stripped);
-            if !move_files
-            {
-                match copy(&src_path, dst_path)
-                {
-                    Err(err) => panic!("Error copying file {} over to {}!: {}", src_path.to_str().unwrap(), path.to_str().unwrap(), err),
-                    Ok(_sz) => {},
-                };
-            }
-            else 
-            {
-                match rename(&src_path, dst_path)
-                {
-                    // try copy files and remove them after in case error occurs
-                    Err(_err) =>
-                    {
-                        match copy(&src_path, dst_path)
-                        {
-                            Err(err) => panic!("Error copying file {} over to {}!: {}", src_path.to_str().unwrap(), path.to_str().unwrap(), err),
-                            Ok(_sz) => {},
-                        };
-                        match remove_file(&src_path)
-                        {
-                            Err(err) => panic!("Error deleting file {}:  {}", src_path.to_str().unwrap(), err),
-                            Ok(()) => {},
-                        };
-                    }
-                    Ok(_sz) => {},
-                };
-            }
-        }
-    }
+        Err(err) => panic!("Error occured while finalizing: {}", err),
+        Ok(()) => {},
+    };
 }
