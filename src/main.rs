@@ -82,7 +82,7 @@ fn create_dir_tree(paths: &Vec<OsString>) -> Result<(), Error>
 }
 
 // parse all regex expressions supplied to see if they're valid
-fn parse_regex(expressions: &Vec<String>) -> Result<Vec<Regex>, regex::Error>
+fn parse_regex(expressions: Vec<String>) -> Result<Vec<Regex>, regex::Error>
 {
     let mut parsed: Vec<Regex> = Vec::new();
     for expr in expressions.iter()
@@ -284,7 +284,7 @@ fn main()
     println!("Found {} files.", file_count);
 
     // parse all regex supplied
-    let regexes: Vec<Regex> = match parse_regex(&expressions)
+    let regexes: Vec<Regex> = match parse_regex(expressions)
     {
         Err(err) => panic!("Failed to parse regex expressions: {}", err),
         Ok(res) => res,
@@ -306,4 +306,44 @@ fn main()
         Err(err) => panic!("Error occured while finalizing: {}", err),
         Ok(()) => {},
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_group() {
+        let regex_str: Vec<String> = vec![r"\.bin$".to_string(), r"\.d$".to_string()];
+        let regexes: Vec<Regex> = parse_regex(regex_str).unwrap();
+
+        let file1: OsString = OsString::from_str("some/path/with/file.bin").unwrap();
+        let file2: OsString = OsString::from_str("some/other/path/with/file.bin").unwrap();
+        let file3: OsString = OsString::from_str("some/path/with/file.d").unwrap();
+
+        let paths: Vec<OsString> = vec![file1.to_owned(), file2.to_owned(), file3.to_owned()];
+
+        let actual = create_groups(
+            regexes,
+            paths,
+            &OsString::from_str("output").unwrap(),
+            &OsString::from_str("prefix").unwrap(),
+            &OsString::from_str(".").unwrap(),
+            false);
+
+        let mut file1_out: OsString = OsString::from_str("output/prefix1/").unwrap();
+        file1_out.push(file1.to_owned());
+        let mut file2_out: OsString = OsString::from_str("output/prefix1/").unwrap();
+        file2_out.push(file2.to_owned());
+        let mut file3_out: OsString = OsString::from_str("output/prefix2/").unwrap();
+        file3_out.push(file3.to_owned());
+
+        let group1: Vec<OsString> = vec![file1_out, file2_out];
+        let group2: Vec<OsString> = vec![file3_out];
+        let expected: Vec<Vec<OsString>> = vec![group1, group2];
+
+        assert_eq!(expected, actual);
+    }
 }
