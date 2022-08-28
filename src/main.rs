@@ -52,12 +52,23 @@ fn get_files(path: &OsString, files_out: &mut Vec<OsString>) -> Result<(), Error
 }
 
 // creates a directory tree for all file paths
-fn create_dir_tree(paths: &Vec<OsString>) -> Result<(), Error>
+fn create_dir_tree(
+    paths: &Vec<OsString>,
+    output_path: &OsString,
+    output_prefix: &OsString,
+    index: usize)
+-> Result<(), Error>
 {
     let mut base_paths: Vec<OsString> = Vec::new();
     for path in paths.iter()
     {
-        let base_path = match Path::new(path).parent()
+        let index_str: OsString = OsString::from((index+1).to_string());
+        let mut group_folder_str: OsString = OsString::new();
+        group_folder_str.push(output_prefix.to_owned());
+        group_folder_str.push(index_str);
+
+        let full_path = Path::new(&output_path).join(Path::new(&group_folder_str)).join(path);
+        let base_path = match full_path.parent() 
         {
             None => { continue; },
             Some(res) => res,
@@ -66,7 +77,7 @@ fn create_dir_tree(paths: &Vec<OsString>) -> Result<(), Error>
         let base_path_str = base_path.as_os_str().to_os_string();
         if !base_paths.contains(&base_path_str) && !base_path_str.is_empty()
         {
-            base_paths.push(base_path_str.to_owned()); // TODO: REMOVE to_owned
+            base_paths.push(base_path_str.to_owned());
         }
         else
         {
@@ -101,8 +112,6 @@ fn parse_regex(expressions: Vec<String>) -> Result<Vec<Regex>, regex::Error>
 fn create_groups(
     regexes: Vec<Regex>,
     paths: Vec<OsString>,
-    output_path: &OsString,
-    output_prefix: &OsString,
     source_path: &OsString,
     flat: bool) -> Vec<Vec<OsString>>
 {
@@ -112,13 +121,6 @@ fn create_groups(
         for (index, expr) in regexes.iter().enumerate()
         {
             let dst_path: PathBuf;
-            let index_str: OsString = OsString::from((index+1).to_string());
-            let mut group_folder_str: OsString = OsString::new();
-            group_folder_str.push(output_prefix.to_owned());
-            group_folder_str.push(index_str);
-            let output_folder = Path::new(&output_path);
-            let group_folder = Path::new(&group_folder_str);
-            let parent_folder = output_folder.join(group_folder);
             let mut file_path = Path::new(path);
             file_path = match file_path.strip_prefix(&source_path)
             {
@@ -128,7 +130,7 @@ fn create_groups(
 
             if !flat
             {
-                dst_path = parent_folder.join(file_path);
+                dst_path = file_path.to_path_buf();
             }
             else
             {
@@ -137,7 +139,7 @@ fn create_groups(
                     None => { continue; },
                     Some(res) => res,
                 };
-                dst_path = parent_folder.join(Path::new(file_name))
+                dst_path = Path::new(file_name).to_path_buf();
             }
 
             let temp = match path.to_str()
@@ -176,25 +178,18 @@ fn finalize(
 {
     for (index, group) in groups.iter().enumerate()
     {
-        create_dir_tree(group).unwrap();
+        create_dir_tree(group, &output_path, &output_prefix, index).unwrap();
         for path in group.iter()
         {
-            let dst_path = Path::new(path);
             let mut group_folder = OsString::new();
             group_folder.push(&output_prefix);
             let index_str = OsString::from((index+1).to_string());
             group_folder.push(index_str);
-            let src_path_stripped = match dst_path.strip_prefix(&output_path)
-            {
-                Err(_err) => { continue; },
-                Ok(res) => res,
-            };
-            let src_path_stripped = match src_path_stripped.strip_prefix(group_folder)
-            {
-                Err(_err) => { continue; },
-                Ok(res) => res,
-            };
-            let src_path = Path::new(&source_path).join(src_path_stripped);
+            let dst_path = Path::new(&output_path)
+                .join(Path::new(&group_folder)
+                      .join(Path::new(path)));
+
+            let src_path = Path::new(&source_path).join(path);
             if !move_files
             {
                 match copy(&src_path, dst_path)
@@ -205,7 +200,7 @@ fn finalize(
             }
             else 
             {
-                match rename(&src_path, dst_path)
+                match rename(&src_path, &dst_path)
                 {
                     // try copy files and remove them after in case error occurs
                     // std::io::ErrorKind::CrossesDevices not supported in stable Rust
@@ -213,12 +208,12 @@ fn finalize(
                     {
                         match copy(&src_path, dst_path)
                         {
-                            Err(err) => { return Err(err); },//panic!("Error copying file {} over to {}!: {}", src_path.to_str().unwrap(), path.to_str().unwrap(), err),
+                            Err(err) => { return Err(err); },
                             Ok(_sz) => {},
                         };
                         match remove_file(&src_path)
                         {
-                            Err(err) => { return Err(err); },//panic!("Error deleting file {}:  {}", src_path.to_str().unwrap(), err),
+                            Err(err) => { return Err(err); },
                             Ok(()) => {},
                         };
                     }
@@ -292,7 +287,7 @@ fn main()
 
     // put each file in a group matching regex (FIFO order removing matches from the list)
     // if file is already assigned, skip it
-    let groups: Vec<Vec<OsString>> = create_groups(regexes, paths, &output_path, &output_prefix, &source_path, flat);
+    let groups: Vec<Vec<OsString>> = create_groups(regexes, paths, &source_path, flat);
 
     if print_tree
     {
@@ -328,20 +323,11 @@ mod tests {
         let actual = create_groups(
             regexes,
             paths,
-            &OsString::from_str("output").unwrap(),
-            &OsString::from_str("prefix").unwrap(),
             &OsString::from_str(".").unwrap(),
             false);
 
-        let mut file1_out: OsString = OsString::from_str("output/prefix1/").unwrap();
-        file1_out.push(file1.to_owned());
-        let mut file2_out: OsString = OsString::from_str("output/prefix1/").unwrap();
-        file2_out.push(file2.to_owned());
-        let mut file3_out: OsString = OsString::from_str("output/prefix2/").unwrap();
-        file3_out.push(file3.to_owned());
-
-        let group1: Vec<OsString> = vec![file1_out, file2_out];
-        let group2: Vec<OsString> = vec![file3_out];
+        let group1: Vec<OsString> = vec![file1, file2];
+        let group2: Vec<OsString> = vec![file3];
         let expected: Vec<Vec<OsString>> = vec![group1, group2];
 
         assert_eq!(expected, actual);
