@@ -12,7 +12,7 @@ Directory splitting utility that lets you separate files by their name/extension
 | `-m` or `--move` | Move files instead of copying them. | False |
 | `-t` or `--tree` | Print each group and their matched files without doing anything. | False |
 
-Example: `./dsplit -p . -e 'bin$' -e '\.d$'` - creates two file groups one ending with `.bin` and the other `.d`. Creates two folders in the current working directory (1 and 2) which contain all these files keeping the structure they were before.
+Example: `./dsplit -s . -e 'bin$' -e '\.d$'` - creates two file groups one ending with `.bin` and the other `.d`. Creates two folders in the current working directory (1 and 2) which contain all these files keeping the structure they were before.
 
 # Still work in progress
 
