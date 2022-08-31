@@ -1,5 +1,3 @@
-use std::fs::remove_file;
-use std::fs::rename;
 use std::path::Path;
 use std::io::Error;
 use std::ffi::OsString;
@@ -11,8 +9,9 @@ use argparse::Store;
 use argparse::StoreTrue;
 use regex::Regex;
 use std::fs::create_dir_all;
-use std::fs::copy;
 
+mod filesystem;
+use filesystem::*;
 
 // gets all files in the folder recursively
 fn get_files(path: &OsString, files_out: &mut Vec<OsString>) -> Result<(), Error>
@@ -168,12 +167,13 @@ fn print_group_tree(groups: &Vec<Vec<OsString>>)
         }
 }
 
-fn finalize(
+fn finalize<T: FileHandler>(
     groups: Vec<Vec<OsString>>,
     output_path: OsString,
     output_prefix: OsString,
     source_path: OsString,
-    move_files: bool)
+    move_files: bool,
+    _: T)
 -> Result<(), std::io::Error>
 {
     for (index, group) in groups.iter().enumerate()
@@ -192,7 +192,7 @@ fn finalize(
             let src_path = Path::new(&source_path).join(path);
             if !move_files
             {
-                match copy(&src_path, dst_path)
+                match T::copy(&src_path, dst_path)
                 {
                     Err(err) => { return Err(err); },//panic!("Error copying file {} over to {}!: {}", src_path.to_str().unwrap(), path.to_str().unwrap(), err),
                     Ok(_sz) => {},
@@ -200,18 +200,18 @@ fn finalize(
             }
             else 
             {
-                match rename(&src_path, &dst_path)
+                match T::rename(&src_path, &dst_path)
                 {
                     // try copy files and remove them after in case error occurs
                     // std::io::ErrorKind::CrossesDevices not supported in stable Rust
                     Err(_err) =>
                     {
-                        match copy(&src_path, dst_path)
+                        match T::copy(&src_path, dst_path)
                         {
                             Err(err) => { return Err(err); },
                             Ok(_sz) => {},
                         };
-                        match remove_file(&src_path)
+                        match T::remove_file(&src_path)
                         {
                             Err(err) => { return Err(err); },
                             Ok(()) => {},
@@ -296,7 +296,7 @@ fn main()
     }
 
     // create the directory tree and move/copy files over
-    match finalize(groups, output_path, output_prefix, source_path, move_files)
+    match finalize(groups, output_path, output_prefix, source_path, move_files, FileHandlerMain)
     {
         Err(err) => panic!("Error occured while finalizing: {}", err),
         Ok(()) => {},
