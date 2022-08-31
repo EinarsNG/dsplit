@@ -19,5 +19,3 @@ pub trait FileHandler
         remove_file(path)
     }
 }
-pub struct FileHandlerMain;
-impl FileHandler for FileHandlerMain{}

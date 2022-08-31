@@ -295,6 +295,8 @@ fn main()
         exit(0);
     }
 
+    struct FileHandlerMain;
+    impl FileHandler for FileHandlerMain{}
     // create the directory tree and move/copy files over
     match finalize(groups, output_path, output_prefix, source_path, move_files, FileHandlerMain)
     {
