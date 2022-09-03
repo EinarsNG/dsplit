@@ -17,6 +17,11 @@ use filesystem::*;
 fn get_files(path: &OsString, files_out: &mut Vec<OsString>) -> Result<(), Error>
 {
    let dir_path = Path::new(path);
+   if !dir_path.exists()
+   {
+        return Err(Error::new(std::io::ErrorKind::NotFound, "Path not found"));
+   }
+
    let directory_entries = match dir_path.read_dir()
    {
         Err(_err) => { files_out.push(path.to_owned()); return Ok(()) }, // permission denied errors
