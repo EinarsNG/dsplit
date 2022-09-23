@@ -317,7 +317,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_group() {
+    fn test_group()
+    {
         let regex_str: Vec<String> = vec![r"\.bin$".to_string(), r"\.d$".to_string()];
         let regexes: Vec<Regex> = parse_regex(regex_str).unwrap();
 
@@ -338,5 +339,64 @@ mod tests {
         let expected: Vec<Vec<OsString>> = vec![group1, group2];
 
         assert_eq!(expected, actual);
+    }
+    
+    #[test]
+    fn test_finalize_copy()
+    {
+        let group1: Vec<OsString> = vec![OsString::from("file1"), OsString::from("file2"), OsString::from("file3")];
+        let group2: Vec<OsString> = vec![OsString::from("file4"), OsString::from("file5")];
+        let groups: Vec<Vec<OsString>> = vec![group1, group2];
+        struct TestFileHandler;
+        impl FileHandler for TestFileHandler
+        {
+            fn rename<P: AsRef<Path>, Q: AsRef<Path>>(_: P, _: Q) -> Result<(), Error> {
+                Ok(())
+            }
+
+            fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<u64, Error>
+            {
+                static FROM_PATHS: [&'static str; 5] = [
+                    "source/file1",
+                    "source/file2",
+                    "source/file3",
+                    "source/file4",
+                    "source/file5"
+                ];
+                static TO_PATHS: [&'static str; 5] = [
+                    "output/prefix1/file1",
+                    "output/prefix1/file2",
+                    "output/prefix1/file3",
+                    "output/prefix2/file4",
+                    "output/prefix2/file5",
+                ];
+                let from_actual: OsString = from.as_ref().as_os_str().to_os_string();
+                let to_actual: OsString = to.as_ref().as_os_str().to_os_string();
+
+                let from_actual_str: &str = from_actual.to_str().unwrap();
+                let to_actual_str: &str = to_actual.to_str().unwrap();
+
+                assert!(FROM_PATHS.contains(&from_actual_str));
+                assert!(TO_PATHS.contains(&to_actual_str));
+
+                let from_index = FROM_PATHS.iter().position(|i| i == &from_actual_str).unwrap();
+                let to_index = TO_PATHS.iter().position(|i| i == &to_actual_str).unwrap();
+                assert_eq!(from_index, to_index);
+                Ok(0)
+            }
+
+            fn remove_file<P: AsRef<Path>>(_: P) -> Result<(), Error> {
+                Ok(())
+            }
+        }
+
+        assert!(matches!(finalize(
+            groups,
+            OsString::from("output"),
+            OsString::from("prefix"),
+            OsString::from("source"),
+            false,
+            TestFileHandler
+        ), Ok(())));
     }
 }
