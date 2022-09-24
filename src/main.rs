@@ -316,6 +316,81 @@ mod tests {
 
     use super::*;
 
+    // very hacky way of checking how many times
+    // the function has been called
+    // must run tests with '-- --test-threads=1' for it to work
+    static mut CALLED_COPY: usize = 0;
+    static mut CALLED_MOVE: usize = 0;
+    static mut CALLED_REMOVE: usize = 0;
+    static mut WANT_MOVE_ERR: bool = false;
+
+    struct TestFileHandler;
+    impl TestFileHandler
+    {
+        fn check_files<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<(), Error>
+        {
+            static FROM_PATHS: [&'static str; 5] = [
+                "source/file1",
+                "source/file2",
+                "source/file3",
+                "source/file4",
+                "source/file5"
+            ];
+            static TO_PATHS: [&'static str; 5] = [
+                "output/prefix1/file1",
+                "output/prefix1/file2",
+                "output/prefix1/file3",
+                "output/prefix2/file4",
+                "output/prefix2/file5",
+            ];
+            let from_actual: OsString = from.as_ref().as_os_str().to_os_string();
+            let from_actual_str: &str = from_actual.to_str().unwrap();
+
+            let to_actual: OsString = to.as_ref().as_os_str().to_os_string();
+            let to_actual_str: &str = to_actual.to_str().unwrap();
+
+            assert!(FROM_PATHS.contains(&from_actual_str));
+            if to_actual_str != ""
+            {
+                assert!(TO_PATHS.contains(&to_actual_str));
+                let from_index = FROM_PATHS.iter().position(|i| i == &from_actual_str).unwrap();
+                let to_index = TO_PATHS.iter().position(|i| i == &to_actual_str).unwrap();
+                assert_eq!(from_index, to_index);
+            }
+            Ok(())
+        }
+    }
+    impl FileHandler for TestFileHandler
+    {
+        fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<(), Error>
+        {
+            unsafe
+            {
+                CALLED_MOVE += 1;
+                if WANT_MOVE_ERR
+                {
+                    return Err(Error::new(std::io::ErrorKind::Other, ""));
+                }
+            }
+            let _ = TestFileHandler::check_files(from, to);
+            Ok(())
+        }
+
+        fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<u64, Error>
+        {
+            unsafe { CALLED_COPY += 1; }
+            let _ = TestFileHandler::check_files(from, to);
+            Ok(0)
+        }
+
+        fn remove_file<P: AsRef<Path>>(from: P) -> Result<(), Error>
+        {
+            unsafe { CALLED_REMOVE += 1; }
+            let _ = TestFileHandler::check_files(from, "");
+            Ok(())
+        }
+    }
+
     #[test]
     fn test_group()
     {
@@ -347,49 +422,14 @@ mod tests {
         let group1: Vec<OsString> = vec![OsString::from("file1"), OsString::from("file2"), OsString::from("file3")];
         let group2: Vec<OsString> = vec![OsString::from("file4"), OsString::from("file5")];
         let groups: Vec<Vec<OsString>> = vec![group1, group2];
-        struct TestFileHandler;
-        impl FileHandler for TestFileHandler
+        
+        unsafe
         {
-            fn rename<P: AsRef<Path>, Q: AsRef<Path>>(_: P, _: Q) -> Result<(), Error> {
-                Ok(())
-            }
-
-            fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<u64, Error>
-            {
-                static FROM_PATHS: [&'static str; 5] = [
-                    "source/file1",
-                    "source/file2",
-                    "source/file3",
-                    "source/file4",
-                    "source/file5"
-                ];
-                static TO_PATHS: [&'static str; 5] = [
-                    "output/prefix1/file1",
-                    "output/prefix1/file2",
-                    "output/prefix1/file3",
-                    "output/prefix2/file4",
-                    "output/prefix2/file5",
-                ];
-                let from_actual: OsString = from.as_ref().as_os_str().to_os_string();
-                let to_actual: OsString = to.as_ref().as_os_str().to_os_string();
-
-                let from_actual_str: &str = from_actual.to_str().unwrap();
-                let to_actual_str: &str = to_actual.to_str().unwrap();
-
-                assert!(FROM_PATHS.contains(&from_actual_str));
-                assert!(TO_PATHS.contains(&to_actual_str));
-
-                let from_index = FROM_PATHS.iter().position(|i| i == &from_actual_str).unwrap();
-                let to_index = TO_PATHS.iter().position(|i| i == &to_actual_str).unwrap();
-                assert_eq!(from_index, to_index);
-                Ok(0)
-            }
-
-            fn remove_file<P: AsRef<Path>>(_: P) -> Result<(), Error> {
-                Ok(())
-            }
+            CALLED_MOVE = 0;
+            CALLED_COPY = 0;
+            CALLED_REMOVE = 0;
+            WANT_MOVE_ERR = false;
         }
-
         assert!(matches!(finalize(
             groups,
             OsString::from("output"),
@@ -398,5 +438,72 @@ mod tests {
             false,
             TestFileHandler
         ), Ok(())));
+        unsafe
+        {
+            assert_eq!(CALLED_MOVE, 0);
+            assert_eq!(CALLED_COPY, 5);
+            assert_eq!(CALLED_REMOVE, 0);
+        }
     }
+
+    #[test]
+    fn test_finalize_move()
+    {
+        let group1: Vec<OsString> = vec![OsString::from("file1"), OsString::from("file2"), OsString::from("file3")];
+        let group2: Vec<OsString> = vec![OsString::from("file4"), OsString::from("file5")];
+        let groups: Vec<Vec<OsString>> = vec![group1, group2];
+        
+        unsafe
+        {
+            CALLED_MOVE = 0;
+            CALLED_COPY = 0;
+            CALLED_REMOVE = 0;
+            WANT_MOVE_ERR = false;
+        }
+        assert!(matches!(finalize(
+            groups,
+            OsString::from("output"),
+            OsString::from("prefix"),
+            OsString::from("source"),
+            true,
+            TestFileHandler
+        ), Ok(())));
+        unsafe
+        {
+            assert_eq!(CALLED_MOVE, 5);
+            assert_eq!(CALLED_COPY, 0);
+            assert_eq!(CALLED_REMOVE, 0);
+        }
+    }
+
+    #[test]
+    fn test_finalize_move_failed()
+    {
+        let group1: Vec<OsString> = vec![OsString::from("file1"), OsString::from("file2"), OsString::from("file3")];
+        let group2: Vec<OsString> = vec![OsString::from("file4"), OsString::from("file5")];
+        let groups: Vec<Vec<OsString>> = vec![group1, group2];
+        
+        unsafe
+        {
+            CALLED_MOVE = 0;
+            CALLED_COPY = 0;
+            CALLED_REMOVE = 0;
+            WANT_MOVE_ERR = true;
+        }
+        assert!(matches!(finalize(
+            groups,
+            OsString::from("output"),
+            OsString::from("prefix"),
+            OsString::from("source"),
+            true,
+            TestFileHandler
+        ), Ok(())));
+        unsafe
+        {
+            assert_eq!(CALLED_MOVE, 5);
+            assert_eq!(CALLED_COPY, 5);
+            assert_eq!(CALLED_REMOVE, 5);
+        }
+    }
+
 }
