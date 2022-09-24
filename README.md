@@ -19,5 +19,5 @@ Example: `./dsplit -s . -e 'bin$' -e '\.d$'` - creates two file groups one endin
 # TODO
 - [x] Add description
 - [x] Clean up the main function
-- [ ] Write unit tests
+- [x] Write unit tests
 - [ ] Refactor
