@@ -14,8 +14,6 @@ Directory splitting utility that lets you separate files by their name/extension
 
 Example: `./dsplit -s . -e 'bin$' -e '\.d$'` - creates two file groups one ending with `.bin` and the other `.d`. Creates two folders in the current working directory (1 and 2) which contain all these files keeping the structure they were before.
 
-# Still work in progress
-
 # TODO
 - [x] Add description
 - [x] Clean up the main function
